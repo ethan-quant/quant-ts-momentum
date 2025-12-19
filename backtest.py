@@ -16,7 +16,6 @@ Strategy v1.0 Backtest Skeleton
 - Costs: 5 bps per 1.0 turnover (applied on rebalance days)
 """
 
-from __future__ import annotations
 
 import numpy as np
 import pandas as pd
@@ -45,13 +44,16 @@ END_DATE = None             # None => today
 # Helpers
 # ----------------------------
 def download_adj_close(tickers: list[str], start: str, end: str | None) -> pd.DataFrame:
-    px = yf.download(tickers, start=start, end=end, auto_adjust=True, progress=False)["Close"]
-    if isinstance(px, pd.Series):
-        px = px.to_frame()
-    px = px.dropna(how="all")
+    frames = []
+    for t in tickers:
+        df = yf.download(t, start=start, end=end, auto_adjust=True, progress=False)
+        if df.empty:
+            raise RuntimeError(f"No data downloaded for {t}")
+        frames.append(df["Close"].rename(t.upper()))
+    px = pd.concat(frames, axis=1).dropna(how="all")
     px = px.ffill().dropna()
-    px.columns = [c.upper() for c in px.columns]
     return px
+
 
 
 def quarter_end_rebalance_dates(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
@@ -73,6 +75,15 @@ def quarter_end_rebalance_dates(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
 def annualized_vol(returns: pd.DataFrame, window: int) -> pd.DataFrame:
     return returns.rolling(window).std() * np.sqrt(252)
 
+def compute_signal(prices: pd.DataFrame, lookback: int = 252) -> pd.DataFrame:
+    """
+    Plain 12M momentum:
+    signal_t = 1 if (price_{t-1} / price_{t-1-lookback} - 1) > 0 else 0
+    """
+    pr = prices.shift(1)
+    mom = pr / pr.shift(lookback) - 1.0
+    sig = (mom > 0).astype(float)
+    return sig
 
 def compute_signal_12_1(prices: pd.DataFrame, lookback: int = 252, skip: int = 21) -> pd.DataFrame:
     """
@@ -276,6 +287,8 @@ def perf_stats(daily_ret: pd.Series) -> pd.Series:
 if __name__ == "__main__":
     prices = download_adj_close(TICKERS, START_DATE, END_DATE)
     bt = run_backtest(prices)
+    save_results_plots(bt, out_dir="results")
+
 
     print("Gross stats")
     print(perf_stats(bt["strat_gross"]).round(4))
@@ -285,6 +298,37 @@ if __name__ == "__main__":
     # Optional quick sanity checks
     print("\nAverage turnover:", bt["turnover"].mean().round(4))
     print("Max single-asset weight:", round(float(bt["weights"].abs().max().max()), 4))
+
+import os
+import matplotlib.pyplot as plt
+
+def save_results_plots(bt: dict, out_dir: str = "results") -> None:
+    os.makedirs(out_dir, exist_ok=True)
+
+    eq = bt["eq_net"].dropna()
+    # Equity curve
+    plt.figure()
+    plt.plot(eq.index, eq.values)
+    plt.title("Equity Curve (Net)")
+    plt.xlabel("Date")
+    plt.ylabel("Growth of $1")
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, "equity_curve.png"), dpi=200)
+    plt.close()
+
+    # Drawdown curve
+    running_max = eq.cummax()
+    dd = (eq / running_max) - 1.0
+
+    plt.figure()
+    plt.plot(dd.index, dd.values)
+    plt.title("Drawdown (Net)")
+    plt.xlabel("Date")
+    plt.ylabel("Drawdown")
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, "drawdown.png"), dpi=200)
+    plt.close()
+
 
 """***v1.0 Production Baseline***
 
