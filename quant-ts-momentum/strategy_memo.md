@@ -3,7 +3,6 @@
 **Strategy:** Time-Series Momentum with Risk Regime Filter  
 **Author:** Ethan M
 **Status:** Research / Educational  
-**Date:** _(add today’s date if you want)_
 
 ---
 
