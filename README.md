@@ -73,6 +73,12 @@ When the filter is risk-off, all positions are closed and the portfolio holds ca
 
 > The strategy prioritizes capital preservation and stability over return maximization.
 
+## 📉 Results Plots
+
+![Equity Curve (Net)](results/equity_curve.png)
+
+![Drawdown (Net)](results/drawdown.png)
+
 ---
 
 ## 🧪 Research Process
